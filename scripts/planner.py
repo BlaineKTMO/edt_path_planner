@@ -4,31 +4,47 @@ import rospy
 import cv2
 import numpy as np
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
-from nav_msgs.msg import Path
+from nav_msgs.msg import Path, OccupancyGrid
 from geometry_msgs.msg import PoseStamped, Pose, Point
 from std_msgs.msg import Header
+
+COST_THRESHOLD = 0.6
 
 class ImageProcessingNode:
     def __init__(self):
         rospy.init_node('image_processing_node')
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber('image_topic', Image, self.occupancy_grid_callback)
-        self.path_pub = rospy.Publisher('path_topic', Path, queue_size=1)
-        self.resolution = None # Resolution of the grid [m/cell]
+        self.image_sub = rospy.Subscriber('/composite_costmap/costmap/costmap', OccupancyGrid, self.occupancy_grid_callback)
+        self.path_pub = rospy.Publisher('/path', Path, queue_size=1)
+        self.resolution = None  # Resolution of the grid [m/cell]
         self.length_x = None  # Length in x-direction [m]
         self.length_y = None  # Length in y-direction [m]
         self.grid_map_center = Pose()  # Pose of the grid map center
 
     def occupancy_grid_callback(self, msg):
         self.resolution = msg.info.resolution
-        self.map_width = msg.info.width
-        self.map_height = msg.info.height
+        self.map_width = round(msg.info.width / self.resolution)
+        self.map_height = round(msg.info.height / self.resolution)
         self.map_origin = msg.info.origin
+        
+        image = np.zeros((self.map_height, self.map_width, 3), dtype=np.uint8)
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                index = y * self.map_width + x
+                
+                print(msg.data)
+                cost = msg.data[index]
+                if cost >= COST_THRESHOLD:
+                    color = (255, 255, 255)
+                else:
+                    color = (0, 0, 0)
 
-        self.path_generator(msg.data)
+                image[y, x] = color
+
+        self.path_generator(image)
 
     def path_generator(self, msg):
+
         # Convert ROS Image message to OpenCV image
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
 
