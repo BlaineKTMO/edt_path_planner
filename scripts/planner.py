@@ -72,16 +72,12 @@ class ImageProcessingNode:
         # Grey the image
         grayimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # cv2.imshow("image", grayimg)
-
         # Apply Euclidean distance transform
-        dist_transform = cv2.distanceTransform(grayimg, cv2.DIST_L2, 3)
-
-        # cv2.imshow("image", dist_transform)
-        # cv2.waitKey()
+        dist_transform = cv2.distanceTransform(grayimg, cv2.DIST_C, 3, dstType=cv2.CV_8U)
+        normalized = cv2.normalize(dist_transform, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
 
         # Skeletonize the image
-        skeleton = self.skeletonize(dist_transform)
+        skeleton = self.skeletonize(normalized)
         # skeleton_gray = cv2.cvtColor(skeleton, cv2.COLOR_BAYER_BG2GRAY)
 
         cv2.imshow("skeleton", skeleton)
@@ -104,9 +100,8 @@ class ImageProcessingNode:
         while True:
             eroded = cv2.erode(binary_image, element)
             temp = cv2.dilate(eroded, element)
-            temp = cv2.normalize(temp, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
-            temp = cv2.subtract(binary_image, temp, dtype=cv2.CV_8U)
-            print(len(skeleton))
+            # temp = cv2.normalize(temp, None, 255, 0, cv2.NORM_MINMAX, cv2.CV_8U)
+            temp = cv2.subtract(binary_image, temp)
             skeleton = cv2.bitwise_or(skeleton, temp)
             binary_image = eroded.copy()
 
@@ -138,9 +133,12 @@ class ImageProcessingNode:
         path = Path()
         path.header.frame_id = self.frame_id
 
-        contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
         longest_contour = max(contours, key=cv2.contourArea)
+        cv2.drawContours(image, longest_contour, -1, (255, 0, 255))
+        cv2.imshow("contours", image)
+        cv2.waitKey()
 
         for point in longest_contour:
             pose = PoseStamped()
@@ -148,8 +146,8 @@ class ImageProcessingNode:
 
             # Calculate position using resolution and grid map center
             print(self.grid_map_center.position)
-            pose.pose.position.y = point[0][0] * self.resolution - 10
-            pose.pose.position.x = point[0][1] * self.resolution - 2
+            pose.pose.position.y = point[0][1] * self.resolution
+            pose.pose.position.x = point[0][0] * self.resolution
 
             path.poses.append(pose)
 
